@@ -14,8 +14,6 @@ from langchain.embeddings import CacheBackedEmbeddings, OpenAIEmbeddings
 
 llm = ChatOpenAI(model="gpt-4o-mini" ,temperature=0.1,)
 
-has_transcript = os.path.exists("./.cache/simon.txt")
-
 splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
     chunk_size=800,
     chunk_overlap=100,
@@ -25,7 +23,7 @@ splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
 @st.cache_data()
 def embed_file(file_path):
     file_name = os.path.basename(file_path)
-    cache_dir = LocalFileStore(f"/Users/sena/FULLSTACK-GPT/.cache/embeddings/{file_name}")
+    cache_dir = LocalFileStore(f"./.cache/embeddings/{file_name}")
     splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
         chunk_size=800,
         chunk_overlap=100,
@@ -42,8 +40,6 @@ def embed_file(file_path):
 # terminal command : ffmpeg -i 파일명.mp4 -vn 파일명.mp3 / -y : Always Yes로 설정
 @st.cache_data()
 def extract_audio_from_video(video_path):
-    if has_transcript:
-        return
     audio_path = video_path.replace("mp4", "mp3")
     command = ["ffmpeg", "-y", "-i", video_path, "-vn", audio_path]
     subprocess.run(command)
@@ -53,8 +49,6 @@ def extract_audio_from_video(video_path):
 # track.duration_seconds 오디오 길이 확인 (밀리세컨 단위)
 @st.cache_data()
 def cut_audio_in_chunks(audio_path, chunk_size, chunks_folder):
-    if has_transcript:
-        return
     track = AudioSegment.from_mp3(audio_path)
     chunk_len = chunk_size * 60 * 1000
     chunks = math.ceil(len(track) / chunk_len)
@@ -63,7 +57,7 @@ def cut_audio_in_chunks(audio_path, chunk_size, chunks_folder):
         end_time = (i + 1) * chunk_len
         chunk = track[start_time:end_time]
         chunk.export(
-            f"/Users/sena/FULLSTACK-GPT/{chunks_folder}/chunk_{i}.mp3",
+            f"./{chunks_folder}/chunk_{i}.mp3",
             format="mp3",
         )
 
@@ -71,8 +65,6 @@ def cut_audio_in_chunks(audio_path, chunk_size, chunks_folder):
 # ✅ 파일 경로를 하나씩 불러와 텍스트화 후 저장 (a : append 모드)
 @st.cache_data()
 def transcribe_chunks(chunk_folder, destination):
-    if has_transcript:
-        return
     files = glob.glob(f"{chunk_folder}/*.mp3") # glob 파일 경로를 리스트로 만들기
     files.sort() # 파일 정렬
     for file in files:
@@ -105,9 +97,9 @@ with st.sidebar:
     )
     if video:
         status_container = st.empty() 
-        chunks_folder = "/Users/sena/FULLSTACK-GPT/.cache/chunks"
+        chunks_folder = "./.cache/chunks"
         video_content = video.read()
-        video_path = f"/Users/sena/FULLSTACK-GPT/.cache/{video.name}"
+        video_path = f"./.cache/{video.name}"
         #  ✅ 비디오에서 오디오로 변환 경로/텍스트 변환 경로 설정 
         audio_path = video_path.replace("mp4", "mp3")
         transcript_path = video_path.replace("mp4", "txt")

@@ -14,6 +14,16 @@ from langchain.memory import ConversationBufferMemory
 st.set_page_config(page_title="DocumentGPT", page_icon="📑")
 st.title("DocumentGPT")
 
+st.markdown(
+    """
+Welcome!
+            
+Use this chatbot to ask questions to an AI about your files!
+
+Provide API Key and Upload your files on the sidebar.
+"""
+)
+
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
@@ -70,12 +80,12 @@ llm = ChatOpenAI(
 @st.cache_resource(show_spinner="Embedding file...") 
 def embed_file(file, openai_api_key):
     file_content = file.read()
-    file_path = f"/Users/sena/FULLSTACK-GPT/.cache/files/{file.name}"
+    file_path = f"./.cache/files/{file.name}"
     
     with open(file_path, "wb") as f:
         f.write(file_content)
 
-    cache_dir = LocalFileStore(f"/Users/sena/FULLSTACK-GPT/.cache/embeddings/{file.name}")
+    cache_dir = LocalFileStore(f"./.cache/embeddings/{file.name}")
     splitter = CharacterTextSplitter.from_tiktoken_encoder(
         separator="\n", 
         chunk_size=600,
