@@ -14,8 +14,6 @@ from langchain.embeddings import CacheBackedEmbeddings, OpenAIEmbeddings
 
 llm = ChatOpenAI(model="gpt-3.5-turbo-1106" ,temperature=0.1,)
 
-has_transcript = os.path.exists("./.cache/TimFerrissShow.txt")
-
 splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
     chunk_size=800,
     chunk_overlap=100,
@@ -42,8 +40,6 @@ def embed_file(file_path):
 # terminal command : ffmpeg -i 파일명.mp4 -vn 파일명.mp3 / -y : Always Yes로 설정
 @st.cache_data()
 def extract_audio_from_video(video_path):
-    if has_transcript:
-        return
     audio_path = video_path.replace("mp4", "mp3")
     command = ["ffmpeg", "-y", "-i", video_path, "-vn", audio_path]
     subprocess.run(command)
@@ -53,8 +49,6 @@ def extract_audio_from_video(video_path):
 # track.duration_seconds 오디오 길이 확인 (밀리세컨 단위)
 @st.cache_data()
 def cut_audio_in_chunks(audio_path, chunk_size, chunks_folder):
-    if has_transcript:
-        return
     track = AudioSegment.from_mp3(audio_path)
     chunk_len = chunk_size * 60 * 1000
     chunks = math.ceil(len(track) / chunk_len)
@@ -71,8 +65,6 @@ def cut_audio_in_chunks(audio_path, chunk_size, chunks_folder):
 # ✅ 파일 경로를 하나씩 불러와 텍스트화 후 저장 (a : append 모드)
 @st.cache_data()
 def transcribe_chunks(chunk_folder, destination):
-    if has_transcript:
-        return
     files = glob.glob(f"{chunk_folder}/*.mp3") # glob 파일 경로를 리스트로 만들기
     files.sort() # 파일 정렬
     for file in files:
@@ -99,6 +91,15 @@ Get started by uploading a video file in the sidebar.
 )
 
 with st.sidebar:
+    openai_api_key = st.text_input("🔑 OpenAI API 키를 입력하세요:", type="password")
+    st.markdown(
+    """
+    <a href="https://github.com/HarukiFantasy/Fullstack-gpt" target="_blank" style="color: gray; text-decoration: none;">
+        <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="20">
+        View on GitHub
+    </a>
+    """)
+
     video = st.file_uploader(
         "Video",
         type=["mp4", "avi", "mkv", "mov"],
@@ -127,10 +128,17 @@ with st.sidebar:
             time.sleep(2) 
         # status_container.empty()
 
+if not openai_api_key:
+    st.info("API key has not been provided.")
+    st.stop()
+
+if openai_api_key:
+    st.session_state["openai_api_key"] = openai_api_key
+
+
 transcript_tab, summary_tab, qa_tab = st.tabs(
     ["Transcript", "Summary", "Q&A"]
 )
-
 
 @st.cache_data()
 def load_transcript(transcript_path):
