@@ -112,7 +112,7 @@ with st.sidebar:
 
     st.markdown(
         """
-        <a href="https://github.com/HarukiFantasy/Fullstack-gpt" target="_blank" style="color: gray; text-decoration: none;">
+        <a href="https://github.com/HarukiFantasy/FULLSTACK_GPT" target="_blank" style="color: gray; text-decoration: none;">
             <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="20">
             View on GitHub
         </a>

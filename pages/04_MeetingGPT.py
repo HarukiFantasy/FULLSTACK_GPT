@@ -94,11 +94,14 @@ with st.sidebar:
     openai_api_key = st.text_input("🔑 OpenAI API 키를 입력하세요:", type="password")
     st.markdown(
     """
-    <a href="https://github.com/HarukiFantasy/Fullstack-gpt" target="_blank" style="color: gray; text-decoration: none;">
+    <a href="https://github.com/HarukiFantasy/FULLSTACK_GPT" target="_blank" style="color: gray; text-decoration: none;">
         <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="20">
         View on GitHub
     </a>
-    """)
+    """,
+    unsafe_allow_html=True
+)
+
 
     video = st.file_uploader(
         "Video",
