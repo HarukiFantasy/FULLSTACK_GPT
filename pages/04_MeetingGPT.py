@@ -25,7 +25,7 @@ splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
 @st.cache_data()
 def embed_file(file_path):
     file_name = os.path.basename(file_path)
-    cache_dir = LocalFileStore(f"./.cache/embeddings/{file_name}")
+    cache_dir = LocalFileStore(f"/Users/sena/FULLSTACK-GPT/.cache/embeddings/{file_name}")
     splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
         chunk_size=800,
         chunk_overlap=100,
@@ -63,7 +63,7 @@ def cut_audio_in_chunks(audio_path, chunk_size, chunks_folder):
         end_time = (i + 1) * chunk_len
         chunk = track[start_time:end_time]
         chunk.export(
-            f"./{chunks_folder}/chunk_{i}.mp3",
+            f"/Users/sena/FULLSTACK-GPT/{chunks_folder}/chunk_{i}.mp3",
             format="mp3",
         )
 
@@ -105,9 +105,9 @@ with st.sidebar:
     )
     if video:
         status_container = st.empty() 
-        chunks_folder = "./.cache/chunks"
+        chunks_folder = "/Users/sena/FULLSTACK-GPT/.cache/chunks"
         video_content = video.read()
-        video_path = f"./.cache/{video.name}"
+        video_path = f"/Users/sena/FULLSTACK-GPT/.cache/{video.name}"
         #  ✅ 비디오에서 오디오로 변환 경로/텍스트 변환 경로 설정 
         audio_path = video_path.replace("mp4", "mp3")
         transcript_path = video_path.replace("mp4", "txt")

@@ -65,7 +65,7 @@ st.title("QuizGPT")
 @st.cache_data(show_spinner="Loading file...")
 def split_file(file):
     file_content = file.read()
-    file_path = f"./.cache/quiz_files/{file.name}"
+    file_path = f"/Users/sena/FULLSTACK-GPT/.cache/quiz_files/{file.name}"
     with open(file_path, "wb") as f:
         f.write(file_content)
     splitter = CharacterTextSplitter.from_tiktoken_encoder(
