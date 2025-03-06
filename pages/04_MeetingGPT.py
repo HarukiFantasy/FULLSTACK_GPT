@@ -12,7 +12,9 @@ from langchain.vectorstores.faiss import FAISS
 from langchain.embeddings import CacheBackedEmbeddings, OpenAIEmbeddings
 
 
-llm = ChatOpenAI(model="gpt-3.5-turbo-1106" ,temperature=0.1,)
+llm = ChatOpenAI(model="gpt-4o-mini" ,temperature=0.1,)
+
+has_transcript = os.path.exists("./.cache/simon.txt")
 
 splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
     chunk_size=800,
@@ -40,6 +42,8 @@ def embed_file(file_path):
 # terminal command : ffmpeg -i 파일명.mp4 -vn 파일명.mp3 / -y : Always Yes로 설정
 @st.cache_data()
 def extract_audio_from_video(video_path):
+    if has_transcript:
+        return
     audio_path = video_path.replace("mp4", "mp3")
     command = ["ffmpeg", "-y", "-i", video_path, "-vn", audio_path]
     subprocess.run(command)
@@ -49,6 +53,8 @@ def extract_audio_from_video(video_path):
 # track.duration_seconds 오디오 길이 확인 (밀리세컨 단위)
 @st.cache_data()
 def cut_audio_in_chunks(audio_path, chunk_size, chunks_folder):
+    if has_transcript:
+        return
     track = AudioSegment.from_mp3(audio_path)
     chunk_len = chunk_size * 60 * 1000
     chunks = math.ceil(len(track) / chunk_len)
@@ -65,6 +71,8 @@ def cut_audio_in_chunks(audio_path, chunk_size, chunks_folder):
 # ✅ 파일 경로를 하나씩 불러와 텍스트화 후 저장 (a : append 모드)
 @st.cache_data()
 def transcribe_chunks(chunk_folder, destination):
+    if has_transcript:
+        return
     files = glob.glob(f"{chunk_folder}/*.mp3") # glob 파일 경로를 리스트로 만들기
     files.sort() # 파일 정렬
     for file in files:
@@ -90,37 +98,13 @@ Get started by uploading a video file in the sidebar.
 """
 )
 
-CACHE_DIR = os.path.abspath("./cache")  # ./cache 폴더를 사용
-FILES_DIR = os.path.join(CACHE_DIR, "files")  # ./cache/files 경로 설정
-
-# ✅ 필요하면 디렉토리를 생성
-os.makedirs(FILES_DIR, exist_ok=True)
-
 with st.sidebar:
-    openai_api_key = st.text_input("🔑 OpenAI API 키를 입력하세요:", type="password")
-    st.markdown(
-    """
-    <a href="https://github.com/HarukiFantasy/FULLSTACK_GPT" target="_blank" style="color: gray; text-decoration: none;">
-        <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="20">
-        View on GitHub
-    </a>
-    """,
-    unsafe_allow_html=True
-)
-
     video = st.file_uploader(
         "Video",
         type=["mp4", "avi", "mkv", "mov"],
     )
     if video:
-        # ✅ 파일 저장할 디렉토리 설정
-        video_path = os.path.join(FILES_DIR, video.name)
-        audio_path = video_path.replace(".mp4", ".mp3")
-        transcript_path = video_path.replace(".mp4", ".txt")
-
-    # ✅ 파일 저장 (배포 환경에서도 동작하도록 절대 경로 사용)
-    with open(video_path, "wb") as f:
-        f.write(video.read())
+        status_container = st.empty() 
         chunks_folder = "./.cache/chunks"
         video_content = video.read()
         video_path = f"./.cache/{video.name}"
@@ -129,30 +113,24 @@ with st.sidebar:
         transcript_path = video_path.replace("mp4", "txt")
         st.session_state["transcript_path"] = transcript_path
 
-        with st.status("Loading video...") as status:
+        with status_container.status("Loading video...") as status:
             # ✅ 파일 읽고, 오디오 추출, 분할
             with open(video_path, "wb") as f:
                 f.write(video_content)
             status.update(label="Extracting audio...", state="running")
             extract_audio_from_video(video_path)
             status.update(label="Cutting audio segments...", state="running")
-            cut_audio_in_chunks(audio_path, 3, chunks_folder)
+            cut_audio_in_chunks(audio_path, 10, chunks_folder)
             status.update(label="Transcribing audio...", state="running")
             transcribe_chunks(chunks_folder, transcript_path)
             status.update(label="Complete!", state="complete")
             time.sleep(2) 
-
-if not openai_api_key:
-    st.info("API key has not been provided.")
-    st.stop()
-
-if openai_api_key:
-    st.session_state["openai_api_key"] = openai_api_key
-
+        status_container.empty()
 
 transcript_tab, summary_tab, qa_tab = st.tabs(
     ["Transcript", "Summary", "Q&A"]
 )
+
 
 @st.cache_data()
 def load_transcript(transcript_path):

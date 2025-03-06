@@ -17,15 +17,9 @@ st.title("DocumentGPT")
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
-CACHE_DIR = os.path.abspath("./cache")  # ./cache 폴더를 사용
-FILES_DIR = os.path.join(CACHE_DIR, "files")  # ./cache/files 경로 설정
-
-# ✅ 필요하면 디렉토리를 생성
-os.makedirs(FILES_DIR, exist_ok=True)
-
 with st.sidebar:
-    file = st.file_uploader("Upload a .txt, .pdf, or .docx file", type=["pdf", "txt", "docx"])
     openai_api_key = st.text_input("🔑 OpenAI API 키를 입력하세요:", type="password")
+    file = st.file_uploader("Upload a .txt, .pdf, or .docx file", type=["pdf", "txt", "docx"])
     st.markdown(
     """
     <a href="https://github.com/HarukiFantasy/FULLSTACK_GPT" target="_blank" style="color: gray; text-decoration: none;">
