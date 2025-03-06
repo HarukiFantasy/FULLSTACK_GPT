@@ -90,6 +90,12 @@ Get started by uploading a video file in the sidebar.
 """
 )
 
+CACHE_DIR = os.path.abspath("./cache")  # ./cache 폴더를 사용
+FILES_DIR = os.path.join(CACHE_DIR, "files")  # ./cache/files 경로 설정
+
+# ✅ 필요하면 디렉토리를 생성
+os.makedirs(FILES_DIR, exist_ok=True)
+
 with st.sidebar:
     openai_api_key = st.text_input("🔑 OpenAI API 키를 입력하세요:", type="password")
     st.markdown(
@@ -102,13 +108,19 @@ with st.sidebar:
     unsafe_allow_html=True
 )
 
-
     video = st.file_uploader(
         "Video",
         type=["mp4", "avi", "mkv", "mov"],
     )
     if video:
-        # status_container = st.empty() 
+        # ✅ 파일 저장할 디렉토리 설정
+        video_path = os.path.join(FILES_DIR, video.name)
+        audio_path = video_path.replace(".mp4", ".mp3")
+        transcript_path = video_path.replace(".mp4", ".txt")
+
+    # ✅ 파일 저장 (배포 환경에서도 동작하도록 절대 경로 사용)
+    with open(video_path, "wb") as f:
+        f.write(video.read())
         chunks_folder = "./.cache/chunks"
         video_content = video.read()
         video_path = f"./.cache/{video.name}"
@@ -129,7 +141,6 @@ with st.sidebar:
             transcribe_chunks(chunks_folder, transcript_path)
             status.update(label="Complete!", state="complete")
             time.sleep(2) 
-        # status_container.empty()
 
 if not openai_api_key:
     st.info("API key has not been provided.")
