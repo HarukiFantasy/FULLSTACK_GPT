@@ -91,12 +91,15 @@ Get started by uploading a video file in the sidebar.
 )
 
 with st.sidebar:
+    openai_api_key = st.text_input("🔑 OpenAI API 키를 입력하세요:", type="password")
     video = st.file_uploader(
         "Video",
         type=["mp4", "avi", "mkv", "mov"],
     )
     if video:
-        status_container = st.empty() 
+        if "openai_api_key" not in st.session_state or not st.session_state["openai_api_key"]:
+            st.warning("⚠️ API Key is required!")
+            st.stop()
         chunks_folder = "./.cache/chunks"
         video_content = video.read()
         video_path = f"./.cache/{video.name}"
@@ -105,7 +108,7 @@ with st.sidebar:
         transcript_path = video_path.replace("mp4", "txt")
         st.session_state["transcript_path"] = transcript_path
 
-        with status_container.status("Loading video...") as status:
+        with st.status("Loading video...") as status:
             # ✅ 파일 읽고, 오디오 추출, 분할
             with open(video_path, "wb") as f:
                 f.write(video_content)
@@ -116,13 +119,17 @@ with st.sidebar:
             status.update(label="Transcribing audio...", state="running")
             transcribe_chunks(chunks_folder, transcript_path)
             status.update(label="Complete!", state="complete")
-            time.sleep(2) 
-        status_container.empty()
 
 transcript_tab, summary_tab, qa_tab = st.tabs(
     ["Transcript", "Summary", "Q&A"]
 )
 
+if not openai_api_key:
+    st.info("API key has not been provided.")
+    st.stop()
+
+if openai_api_key:
+    st.session_state["openai_api_key"] = openai_api_key
 
 @st.cache_data()
 def load_transcript(transcript_path):

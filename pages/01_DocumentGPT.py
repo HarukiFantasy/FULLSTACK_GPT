@@ -133,7 +133,7 @@ prompt = ChatPromptTemplate.from_messages([
 
 if file:
     if "openai_api_key" not in st.session_state or not st.session_state["openai_api_key"]:
-        st.warning("⚠️ API 키를 입력해야 합니다!")
+        st.warning("⚠️ API Key is required!")
         st.stop()
 
     openai_api_key = st.session_state["openai_api_key"]
