@@ -12,7 +12,7 @@ from langchain.vectorstores.faiss import FAISS
 from langchain.embeddings import CacheBackedEmbeddings, OpenAIEmbeddings
 
 
-llm = ChatOpenAI(model="gpt-4o-mini" ,temperature=0.1,)
+llm = ChatOpenAI(model="gpt-3.5-turbo-1106" ,temperature=0.1,)
 
 has_transcript = os.path.exists("./.cache/TimFerrissShow.txt")
 

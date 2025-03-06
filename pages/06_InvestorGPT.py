@@ -20,7 +20,7 @@ st.markdown(
 )
 
 load_dotenv()
-llm = ChatOpenAI(model_name="gpt-4o-mini-2024-07-18", temperature = 0.1)
+llm = ChatOpenAI(model_name="gpt-3.5-turbo-1106", temperature = 0.1)
 alpha_vantage_api_key = os.environ.get("ALPHA_VANTAGE_API_KEY")
 bravesearch_api_key = os.environ.get("BRAVESEARCH_API_KEY")
 
