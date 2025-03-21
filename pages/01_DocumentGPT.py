@@ -11,21 +11,18 @@ from langchain.chat_models import ChatOpenAI
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.memory import ConversationBufferMemory
 
+# ----- Streamlit UI 설정 -----
+
 st.set_page_config(page_title="DocumentGPT", page_icon="📑")
 st.title("DocumentGPT")
 
 st.markdown(
     """
-Welcome!
-            
-Use this chatbot to ask questions to an AI about your files!
-
-Provide API Key and Upload your files on the sidebar.
-"""
-)
-
-if "messages" not in st.session_state:
-    st.session_state["messages"] = []
+    Welcome!
+    Use this chatbot to ask questions to an AI about your files!
+    Provide API Key and Upload your files on the sidebar.
+    """
+    )
 
 with st.sidebar:
     openai_api_key = st.text_input("🔑 OpenAI API 키를 입력하세요:", type="password")
@@ -39,21 +36,15 @@ with st.sidebar:
     """,
     unsafe_allow_html=True
 )
-
+    
 if not openai_api_key:
     st.info("API key has not been provided.")
     st.stop()
-
 if openai_api_key:
     st.session_state["openai_api_key"] = openai_api_key
 
-if "memory" not in st.session_state:
-    st.session_state["memory"] = ConversationBufferMemory(
-        memory_key="chat_history",
-        return_messages=True
-    )
 
-memory = st.session_state["memory"]  
+# ----- Callback for streaming LLM responses -----
 
 class ChatCallbackHander(BaseCallbackHandler):
     def __init__(self):
@@ -70,6 +61,8 @@ class ChatCallbackHander(BaseCallbackHandler):
         self.message += token
         self.message_box.markdown(self.message)
 
+# ----- LLM 생성 -----
+
 llm = ChatOpenAI(
     temperature=0.1,
     streaming=True,
@@ -77,14 +70,14 @@ llm = ChatOpenAI(
     callbacks=[ChatCallbackHander()]
 )
 
+# ----- 임베딩 처리 & 파일 처리 -----
+
 @st.cache_resource(show_spinner="Embedding file...") 
 def embed_file(file, openai_api_key):
     file_content = file.read()
     file_path = f"./.cache/files/{file.name}"
-    
     with open(file_path, "wb") as f:
         f.write(file_content)
-
     cache_dir = LocalFileStore(f"./.cache/embeddings/{file.name}")
     splitter = CharacterTextSplitter.from_tiktoken_encoder(
         separator="\n", 
@@ -97,13 +90,28 @@ def embed_file(file, openai_api_key):
     )
     return FAISS.from_documents(docs, embeddings).as_retriever()
 
+def format_docs(docs):
+    return "\n\n".join(document.page_content for document in docs)
+
+
+# ----- 메모리 설정 : 대화내역을 llm 에 전달하기 위함 -----
+
+if "memory" not in st.session_state:
+    st.session_state["memory"] = ConversationBufferMemory(
+        memory_key="chat_history",
+        return_messages=True
+    )
+memory = st.session_state["memory"]  
+
 def load_memory(_):
     return memory.load_memory_variables({}).get("chat_history", [])
 
-def save_message(message, role):
-    if "messages" not in st.session_state:
-        st.session_state["messages"] = []
 
+# ----- 메세지 설정 및 기능 구현 -----
+
+st.session_state.setdefault("messages", [])
+
+def save_message(message, role):
     st.session_state["messages"].append({"message": message, "role": role})
 
 def send_message(message, role, save=True):
@@ -116,8 +124,8 @@ def paint_history():
     for message in st.session_state["messages"]:
         send_message(message["message"], message["role"], save=False)
 
-def format_docs(docs):
-    return "\n\n".join(document.page_content for document in docs)
+
+# ----- 프롬프트 구성 -----
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", 
@@ -131,25 +139,25 @@ prompt = ChatPromptTemplate.from_messages([
     ("human", "{question}")
 ])
 
+# ----- 메인 처리 흐름 ----- 
+
 if file:
     if "openai_api_key" not in st.session_state or not st.session_state["openai_api_key"]:
         st.warning("⚠️ API Key is required!")
         st.stop()
-
-    openai_api_key = st.session_state["openai_api_key"]
     retriever = embed_file(file, openai_api_key)
 
     send_message("I'm ready! Ask away!", "ai", save=False)
     paint_history()
     
-    message = st.chat_input("Ask anything about your file...")
+    message = st.chat_input("Ask anything about your file...") 
 
     if message:
         send_message(message, "human")
 
         chain = {
-            "chat_history": RunnableLambda(load_memory),  # ✅ Loads previous chat history
-            "context": retriever | RunnableLambda(format_docs), 
+            "chat_history": RunnableLambda(load_memory), 
+            "context": retriever | RunnableLambda(format_docs),
             "question": RunnablePassthrough()
         } | prompt | llm
 
