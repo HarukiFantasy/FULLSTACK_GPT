@@ -1,5 +1,5 @@
 import json
-import openai
+import random
 from langchain.document_loaders import UnstructuredFileLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.chat_models import ChatOpenAI
@@ -178,17 +178,24 @@ questions_prompt = ChatPromptTemplate.from_messages(
 
 # ------------------ 기능 구현 (quiz chain 실행) ------------------ 
 
+def shuffle_answers(question):
+    answers = question["answers"]
+    random.shuffle(answers)
+    return {**question, "answers": answers}
+
 @st.cache_data(show_spinner="Making quiz...")
-def run_quiz_chain(_docs, difficulty):  
+def run_quiz_chain(_docs, difficulty, topic):  
     chain = questions_prompt | llm
     response = chain.invoke({
         "context": format_docs(_docs),  
         "difficulty": difficulty  
     })
-
     if response.additional_kwargs.get("function_call"):
         function_name = response.additional_kwargs["function_call"]["name"]
         function_args = json.loads(response.additional_kwargs["function_call"]["arguments"])
+
+        if "questions" in function_args:   # LLM은 가장 가능성 높은 토큰부터 순차 생성 -> 정답 섞기 
+            function_args["questions"] = [shuffle_answers(q) for q in function_args["questions"]]
 
         if function_name == "create_quiz":
             return function_args  # 퀴즈 JSON 반환
@@ -222,7 +229,7 @@ else:
             st.info("Please select difficulty first to see the questions")
             st.stop()
         else:
-            response = run_quiz_chain(docs, difficulty)
+            response = run_quiz_chain(docs, difficulty, topic)
             with st.form("questions_form"):
                 for question in response["questions"]:
                     st.write(f"**{question['question']}** *(Difficulty: {question['difficulty']})*") 
