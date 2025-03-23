@@ -1,6 +1,6 @@
 import os, hashlib, requests
 from bs4 import BeautifulSoup
-from langchain.document_loaders import SitemapLoader, AsyncChromiumLoader
+from langchain.document_loaders import SitemapLoader
 from langchain.document_transformers import Html2TextTransformer
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -10,6 +10,8 @@ from langchain.chat_models import ChatOpenAI
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.prompts import ChatPromptTemplate
 import streamlit as st
+
+# ---------- Streamlit UI 설정 ----------
 
 st.set_page_config(page_title="SiteGPT", page_icon="🖥️")
 st.markdown("""
@@ -33,6 +35,9 @@ with st.sidebar:
     </a>
     """, unsafe_allow_html=True)
 
+
+# ---------- 기능 구현 (메세지) ----------
+
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
@@ -49,6 +54,71 @@ def paint_history():
     for msg in st.session_state["messages"]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["message"])
+
+
+# ---------- 기능구현 (사이트 파싱) ----------
+
+def filter_urls_from_sitemap(sitemap_url, keyword):
+    response = requests.get(sitemap_url)
+    if response.status_code != 200:
+        return []
+    soup = BeautifulSoup(response.content, "xml")
+    loader = SitemapLoader(web_path=sitemap_url)
+    sitemap_data = loader.parse_sitemap(soup)
+    filtered_urls = [item["loc"] for item in sitemap_data if keyword.lower() in item["loc"].lower()]
+    return filtered_urls
+
+Html2Text_transformer = Html2TextTransformer()
+
+@st.cache_data(show_spinner="Loading filtered product pages...")
+def load_filtered_product_pages(urls):
+    url_hash = hashlib.md5(("".join(urls)).encode("utf-8")).hexdigest()
+    persist_directory = f"./.cache/site_files/faiss_{url_hash}"
+
+    if os.path.exists(persist_directory):
+        vector_store = FAISS.load_local(persist_directory, OpenAIEmbeddings())
+        return vector_store.as_retriever()
+
+    progress_bar = st.progress(0, text="📄 Loading documents...")
+    status_text = st.empty()
+    documents = []
+    total = len(urls)
+
+    for i, url in enumerate(urls):
+        status_text.markdown(f"🔗 **Processing:** {url}")
+        try:
+            # Playwright 제거 → requests + BeautifulSoup 방식으로 대체
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+            html_text = soup.get_text(separator=" ", strip=True)
+
+            from langchain.schema import Document
+            doc = Document(page_content=html_text, metadata={"source": url})
+            transformed = Html2Text_transformer.transform_documents([doc])
+            documents.extend(transformed)
+
+        except Exception as e:
+            st.warning(f"⚠️ Failed to load {url}: {e}")
+        progress_bar.progress((i + 1) / total, text=f"📄 Loaded {i+1} of {total} documents")
+
+    progress_bar.empty()
+
+    if not documents:
+        st.info("❌ Unable to load the page.")
+        st.stop()
+
+    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        encoding_name="cl100k_base",
+        chunk_size=800, chunk_overlap=100
+    )
+    split_docs = splitter.split_documents(documents)
+    vector_store = FAISS.from_documents(split_docs, OpenAIEmbeddings(model="text-embedding-3-small"))
+    vector_store.save_local(persist_directory)
+    return vector_store.as_retriever()
+
+
+# ---------- 기능 구현 (체인 구성) ----------
 
 def get_answers(inputs):
     docs = inputs["docs"]
@@ -80,57 +150,8 @@ def choose_answer(inputs):
         answer = choose_chain.invoke({"question": question, "answers": condensed})
     return answer
 
-def filter_urls_from_sitemap(sitemap_url, keyword):
-    response = requests.get(sitemap_url)
-    if response.status_code != 200:
-        return []
-    soup = BeautifulSoup(response.content, "xml")
-    loader = SitemapLoader(web_path=sitemap_url)
-    sitemap_data = loader.parse_sitemap(soup)
-    filtered_urls = [item["loc"] for item in sitemap_data if keyword.lower() in item["loc"].lower()]
-    return filtered_urls
 
-Html2Text_transformer = Html2TextTransformer()
-
-@st.cache_data(show_spinner="Loading filtered product pages...")
-def load_filtered_product_pages(urls):
-    url_hash = hashlib.md5(("".join(urls)).encode("utf-8")).hexdigest()
-    persist_directory = f"./.cache/site_files/faiss_{url_hash}"
-
-    if os.path.exists(persist_directory):
-        vector_store = FAISS.load_local(persist_directory, OpenAIEmbeddings())
-        return vector_store.as_retriever()
-
-    progress_bar = st.progress(0, text="📄 Loading documents...")
-    status_text = st.empty()
-    documents = []
-    total = len(urls)
-
-    for i, url in enumerate(urls):
-        status_text.markdown(f"🔗 **Processing:** {url}")
-        try:
-            loader = AsyncChromiumLoader([url])
-            doc = loader.load()
-            transformed = Html2Text_transformer.transform_documents(doc)
-            documents.extend(transformed)
-        except Exception as e:
-            st.warning(f"⚠️ Failed to load {url}: {e}")
-        progress_bar.progress((i + 1) / total, text=f"📄 Loaded {i+1} of {total} documents")
-
-    progress_bar.empty()
-
-    if not documents:
-        st.info("❌ Unable to load the page.")
-        st.stop()
-
-    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        encoding_name="cl100k_base",
-        chunk_size=800, chunk_overlap=100
-    )
-    split_docs = splitter.split_documents(documents)
-    vector_store = FAISS.from_documents(split_docs, OpenAIEmbeddings(model="text-embedding-3-small"))
-    vector_store.save_local(persist_directory)
-    return vector_store.as_retriever()
+# ---------- 콜백 핸들러 ----------
 
 class ChatCallbackHander(BaseCallbackHandler):
     def __init__(self):
@@ -143,6 +164,8 @@ class ChatCallbackHander(BaseCallbackHandler):
     def on_llm_new_token(self, token, *args, **kwargs):
         self.message += token
         self.message_box.markdown(self.message)
+
+# ---------- LLM 및 프롬프트 설정 ----------
 
 llm = ChatOpenAI(
     model="gpt-4o-mini",
@@ -192,6 +215,8 @@ choose_prompt = ChatPromptTemplate.from_messages([
     """),
     ("human", "{question}"),
 ])
+
+# ---------- 메인 흐름 ----------
 
 if not openai_api_key:
     st.info("API key has not been provided.")
