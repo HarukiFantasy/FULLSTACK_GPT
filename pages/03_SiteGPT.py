@@ -53,7 +53,7 @@ def send_message(message, role, save=True):
 def paint_history():
     for msg in st.session_state["sitegpt_messages"]:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["message"])
+            st.markdown(msg["sitegpt_message"])
 
 
 # ---------- 기능구현 (사이트 파싱) ----------
