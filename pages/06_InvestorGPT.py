@@ -1,8 +1,10 @@
 import streamlit as st
 import openai as client
 import json, yfinance, time
-from langchain.utilities import DuckDuckGoSearchAPIWrapper
-from typing_extensions import override
+from langchain.utilities import DuckDuckGoSearchAPIWrapper, SerpAPIWrapper
+import os
+from langchain.utilities import SerpAPIWrapper
+
 
 # ------------------ Streamlit Setup ------------------
 st.set_page_config(page_title="InvestorGPT", page_icon="💹")
@@ -22,13 +24,14 @@ if not openai_api_key:
     st.info("API key has not been provided.")
     st.stop()
 
+serpapi_api_key = os.getenv("SERPAPI_API_KEY", st.secrets.get("SERPAPI_API_KEY"))
+search = SerpAPIWrapper(serpapi_api_key=serpapi_api_key)
 client.api_key = openai_api_key
 assistant_id = "asst_IYOQtkSi1ftVTrQhznFTGFdi" 
 
 # ------------------ 툴 함수 정의 ------------------
 def get_ticker(inputs):
-    ddg = DuckDuckGoSearchAPIWrapper()
-    return ddg.run(f"Ticker symbol of {inputs['company_name']}")
+    return search.run(f"Ticker symbol of {inputs['company_name']}")
 
 def get_income_statement(inputs):
     ticker = inputs["ticker"]
