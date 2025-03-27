@@ -109,10 +109,10 @@ def load_memory(_):
 
 # ----- 메세지 설정 및 기능 구현 -----
 
-st.session_state.setdefault("messages", [])
+st.session_state.setdefault("documentgpt_messages", [])
 
 def save_message(message, role):
-    st.session_state["messages"].append({"message": message, "role": role})
+    st.session_state["documentgpt_messages"].append({"documentgpt_message": message, "role": role})
 
 def send_message(message, role, save=True):
     with st.chat_message(role):
@@ -121,8 +121,8 @@ def send_message(message, role, save=True):
         save_message(message, role)
 
 def paint_history():
-    for message in st.session_state["messages"]:
-        send_message(message["message"], message["role"], save=False)
+    for message in st.session_state["documentgpt_messages"]:
+        send_message(message["documentgpt_message"], message["role"], save=False)
 
 
 # ----- 프롬프트 구성 -----

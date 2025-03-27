@@ -38,11 +38,11 @@ with st.sidebar:
 
 # ---------- 기능 구현 (메세지) ----------
 
-if "messages" not in st.session_state:
-    st.session_state["messages"] = []
+if "sitegpt_messages" not in st.session_state:
+    st.session_state["sitegpt_messages"] = []
 
 def save_message(message, role):
-    st.session_state["messages"].append({"message": message, "role": role})
+    st.session_state["sitegpt_messages"].append({"sitegpt_message": message, "role": role})
 
 def send_message(message, role, save=True):
     with st.chat_message(role):
@@ -51,7 +51,7 @@ def send_message(message, role, save=True):
         save_message(message, role)
 
 def paint_history():
-    for msg in st.session_state["messages"]:
+    for msg in st.session_state["sitegpt_messages"]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["message"])
 
@@ -70,7 +70,7 @@ def filter_urls_from_sitemap(sitemap_url, keyword):
 
 Html2Text_transformer = Html2TextTransformer()
 
-@st.cache_data(show_spinner="Loading filtered product pages...")
+@st.cache_resource(show_spinner="Loading filtered product pages...")
 def load_filtered_product_pages(urls):
     url_hash = hashlib.md5(("".join(urls)).encode("utf-8")).hexdigest()
     persist_directory = f"./.cache/site_files/faiss_{url_hash}"

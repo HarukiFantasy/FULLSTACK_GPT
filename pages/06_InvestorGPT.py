@@ -1,125 +1,142 @@
 import streamlit as st
-import time, os, requests
-from typing import Type
-from langchain.chat_models import ChatOpenAI
-from langchain.tools import BaseTool
-from pydantic import BaseModel, Field
-from langchain.agents import initialize_agent, AgentType
+import openai as client
+import json, yfinance, time
 from langchain.utilities import DuckDuckGoSearchAPIWrapper
-from langchain.schema import SystemMessage
+from typing_extensions import override
 
-
-# ------------------ Streamlit Setup ------------------ 
+# ------------------ Streamlit Setup ------------------
 st.set_page_config(page_title="InvestorGPT", page_icon="💹")
 st.title("InvestorGPT")
-st.markdown(
-    """
-    Welcome to InvestorGPT!
-    """)
-
+st.markdown("Welcome to InvestorGPT!")
 
 with st.sidebar:
-    openai_api_key = st.text_input("🔑 OpenAI API 키를 입력하세요:", type="password")
+    openai_api_key = st.text_input("🔑 Please enter your OpenAI API Key to proceed:", type="password")
+    st.markdown("""
+        <a href="https://github.com/HarukiFantasy/FullStackGPT" target="_blank" style="color: gray; text-decoration: none;">
+            <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="20">
+            View on GitHub
+        </a>
+    """, unsafe_allow_html=True)
 
 if not openai_api_key:
     st.info("API key has not been provided.")
     st.stop()
 
-llm = ChatOpenAI(
-    model_name="gpt-4o-mini", 
-    temperature = 0.1,
-    streaming=True,
-    openai_api_key=openai_api_key
+client.api_key = openai_api_key
+assistant_id = "asst_IYOQtkSi1ftVTrQhznFTGFdi" 
+
+# ------------------ 툴 함수 정의 ------------------
+def get_ticker(inputs):
+    ddg = DuckDuckGoSearchAPIWrapper()
+    return ddg.run(f"Ticker symbol of {inputs['company_name']}")
+
+def get_income_statement(inputs):
+    ticker = inputs["ticker"]
+    stock = yfinance.Ticker(ticker)
+    return json.dumps(stock.income_stmt.to_json())
+
+def get_balance_sheet(inputs):
+    ticker = inputs["ticker"]
+    stock = yfinance.Ticker(ticker)
+    return json.dumps(stock.balance_sheet.to_json())
+
+def get_daily_stock_performance(inputs):
+    ticker = inputs["ticker"]
+    stock = yfinance.Ticker(ticker)
+    return json.dumps(stock.history(period="3mo").to_json())
+
+functions_map = {
+    "get_ticker": get_ticker,
+    "get_income_statement": get_income_statement,
+    "get_balance_sheet": get_balance_sheet,
+    "get_daily_stock_performance": get_daily_stock_performance,
+}
+
+# ------------------ 메시지 관련 ------------------
+
+# 🎯 대화 기록 저장 (최초 실행 시 초기화)
+if "thread_id" not in st.session_state:
+    thread = client.beta.threads.create()
+    st.session_state.thread_id = thread.id
+    st.session_state.messages = []  # 대화 기록 저장
+
+# 🎯 실행 상태 확인
+def get_run(run_id, thread_id):
+    return client.beta.threads.runs.retrieve(run_id=run_id, thread_id=thread_id)
+
+# 🎯 최종 메시지 가져오기 및 UI 업데이트
+def get_messages(thread_id):
+    messages = client.beta.threads.messages.list(thread_id=thread_id)
+    messages = list(messages)
+    messages.reverse()  # 최신 메시지를 위로 정렬
+    
+    # 🔥 Streamlit UI에 대화 업데이트
+    st.session_state.messages = messages
+
+# 🎯 requires_action 상태일 때 실행할 함수
+def get_tool_outputs(run_id, thread_id):
+    run = get_run(run_id, thread_id)
+    outputs = []
+    if run.status == "requires_action":
+        for action in run.required_action.submit_tool_outputs.tool_calls:
+            action_id = action.id
+            function = action.function
+            print(f"Calling function: {function.name} with arg {function.arguments}")
+            outputs.append(
+                {
+                    "output": functions_map[function.name](json.loads(function.arguments)),
+                    "tool_call_id": action_id,
+                }
+            )
+    return outputs
+
+# 🎯 Tool Outputs 제출
+def submit_tool_outputs(run_id, thread_id):
+    outputs = get_tool_outputs(run_id, thread_id)
+    if outputs:
+        client.beta.threads.runs.submit_tool_outputs(
+            run_id=run_id, thread_id=thread_id, tool_outputs=outputs
+        )
+
+# 🎯 메시지 전송 및 실행 (Streamlit UI 포함)
+def send_message(user_input):
+    thread_id = st.session_state.thread_id  # 기존 쓰레드 사용
+
+    # 🔹 기존 쓰레드에 메시지 추가
+    client.beta.threads.messages.create(
+        thread_id=thread_id, 
+        role="user", 
+        content=user_input
     )
 
-alpha_vantage_api_key = os.environ.get("ALPHA_VANTAGE_API_KEY")
+    # 🔹 실행 시작 (get_run)
+    run = client.beta.threads.runs.create(
+        thread_id=thread_id,
+        assistant_id=assistant_id
+    )
 
-class StockMarketSymbolSearchToolArgsSchema(BaseModel):
-    query: str = Field(description="The query you will search for")
+    # 🔹 실행이 완료될 때까지 기다림
+    while True:
+        run_status = get_run(run.id, thread_id)
+        print(f"🔄 현재 실행 상태: {run_status.status}")
 
-class StockMarketSymbolSearchTool(BaseTool):
-    name: str = "StockMarketSymnbolSearchTool"
-    description: str = """
-    Use this tool to find the stock market symbol for a compnay. 
-    It takes a query as an argument.
-    Example query: Storck Market Symbol for Apple Company
-    """
-    args_schema: Type[StockMarketSymbolSearchToolArgsSchema] = StockMarketSymbolSearchToolArgsSchema
+        if run_status.status == "requires_action":
+            print("⚡ Function Calling detected, retrieving tool outputs...")
+            submit_tool_outputs(run.id, thread_id)  # 🔥 requires_action 시 outputs 제출
+        elif run_status.status in ["completed", "failed", "cancelled"]:
+            print(f"✅ 실행 완료! 상태: {run_status.status}")
+            break
+        
+        time.sleep(2)  # 2초 대기 후 다시 확인
 
-    def _run(self, query):
-        ddg = DuckDuckGoSearchAPIWrapper()
-        result = ddg.run(query)
-        time.sleep(3)  # Adding delay to avoid rate limiting
-        return result
+    # 🔹 최종 메시지 가져와 Streamlit UI에 업데이트
+    get_messages(thread_id)
 
-class CompanyOverviewArgsSchema(BaseModel):
-    symbol: str = Field(description="Stock symbol of the company. Example: AAPL, TSLA")
+user_input = st.chat_input("💬 Type your message and press Enter...")
+if user_input:
+    send_message(user_input) 
 
-class CompnayOverviewTool(BaseTool):
-    name: str = "CompnayOverviewTool"
-    description: str = """ 
-    Use this to get an overview of the financials of the company. 
-    You should enter a stock symbol. 
-    """
-    args_schema: Type [CompanyOverviewArgsSchema]=CompanyOverviewArgsSchema
-
-    def _run(self, symbol):
-        r = requests.get(f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={symbol}&apikey={alpha_vantage_api_key}")
-        return r.json()
-    
-
-class CompnayIncomeStatementTool(BaseTool):
-    name: str = "CompnayIncomeStatementTool"
-    description: str = """ 
-    Use this to get an income statement of the company. 
-    You should enter a stock symbol. 
-    """
-    args_schema: Type [CompanyOverviewArgsSchema]=CompanyOverviewArgsSchema
-
-    def _run(self, symbol):
-        r = requests.get(f"https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol={symbol}&apikey={alpha_vantage_api_key}")
-        return r.json()["annualReports"]
-    
-
-class CompnayStockPerformanceTool(BaseTool):
-    name: str = "CompnayStockPerformanceTool"
-    description: str = """ 
-    Use this to get a weely performance of the company. 
-    You should enter a stock symbol. 
-    """
-    args_schema: Type [CompanyOverviewArgsSchema]=CompanyOverviewArgsSchema
-    
-    def _run(self, symbol):
-        r = requests.get(f"https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol={symbol}&apikey={alpha_vantage_api_key}")
-        response = r.json()
-        return list(response["Weekly Time Series"].items())[:5]  
-        # 딕셔너리를 리스트로 만든뒤 일부분 5까지 (5주치) 자료 가져옴
-        # { "Weekly Time Series" : {"x1":1, "x2":2, "x3":3} } -> dic_items([ ("x1",1), ("x2",2), ("x3",3) ])
-    
-agent = initialize_agent(
-    llm=llm,
-    verbose=True,
-    agent=AgentType.OPENAI_FUNCTIONS,
-    handle_parsing_errors=True,
-    tools=[
-        StockMarketSymbolSearchTool(),
-        CompnayOverviewTool(),
-        CompnayIncomeStatementTool(),
-        CompnayStockPerformanceTool()
-    ],
-    agent_kwargs={
-        "system_message": SystemMessage(
-            content="""
-            You are a hedge fund manager.
-            You evaluate a company and provide your opinion and reasons why the stock is a buy or not.
-            Consider the performance of a stock, the company overview and the income statement.
-            Be assertive in your judgement and recommend the stock or advise the user against it.
-        """)
-    } # 설정하지 않으면 기본값인 "You are a helpful AI assistant" 정의로 처리된다
-)
-
-company = st.text_input("Write the name of the company you are interested in")
-
-if company:
-    result = agent.invoke(company)
-    st.write(result["output"].replace("$", "\$"))
+# 🎯 Streamlit - 대화 기록 UI 표시
+for message in st.session_state.messages:  
+    with st.chat_message(message.role):
+        st.markdown(message.content[0].text.value)
