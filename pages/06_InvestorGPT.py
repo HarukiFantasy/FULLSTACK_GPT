@@ -4,6 +4,7 @@ import json, yfinance, time
 from langchain.utilities import DuckDuckGoSearchAPIWrapper, SerpAPIWrapper
 import os
 from langchain.utilities import SerpAPIWrapper
+from dotenv import load_dotenv
 
 
 # ------------------ Streamlit Setup ------------------
@@ -24,7 +25,8 @@ if not openai_api_key:
     st.info("API key has not been provided.")
     st.stop()
 
-serpapi_api_key = os.getenv("SERPAPI_API_KEY", st.secrets.get("SERPAPI_API_KEY"))
+load_dotenv()
+serpapi_api_key = os.getenv("SERPAPI_API_KEY")
 search = SerpAPIWrapper(serpapi_api_key=serpapi_api_key)
 client.api_key = openai_api_key
 assistant_id = "asst_IYOQtkSi1ftVTrQhznFTGFdi" 
